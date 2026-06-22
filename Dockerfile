@@ -7,10 +7,7 @@ COPY . /usr/app/
 RUN dotnet publish WeatherApi/WeatherApi.csproj -c Release -o /usr/app/publish
 
 # Install the Graftcode gateway (gg).
-RUN apt-get update && apt-get install -y wget \
-    && wget -O /usr/app/gg.deb https://github.com/grft-dev/graftcode-gateway/releases/latest/download/gg_linux_amd64.deb \
-    && dpkg -i /usr/app/gg.deb && rm /usr/app/gg.deb \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y wget && wget -O /usr/app/gg.deb https://github.com/grft-dev/graftcode-gateway/releases/latest/download/gg_linux_amd64.deb && dpkg -i /usr/app/gg.deb && rm /usr/app/gg.deb && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /usr/app/publish
 

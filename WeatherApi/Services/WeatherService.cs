@@ -3,14 +3,7 @@ using WeatherService.Models;
 
 namespace WeatherService;
 
-/// <summary>
-/// Graftcode-exposed weather module. Every public method here IS the integration
-/// contract (no REST controllers). Methods are <c>static</c> on purpose: this is a
-/// stateless facade, so each call is self-contained and the whole result DTO is
-/// passed by value in a single round-trip (no server-side object to track).
-/// Signatures use only primitives/strings and plain DTOs/arrays, and are synchronous
-/// as required by the Graftcode .NET gateway.
-/// </summary>
+// Graftcode-exposed weather module: public static methods are the stateless integration contract (sync, primitives/strings/DTOs/arrays only).
 public static class WeatherProvider
 {
     private static readonly string? WEATHER_API_URL = Environment.GetEnvironmentVariable("WEATHER_API_URL");
