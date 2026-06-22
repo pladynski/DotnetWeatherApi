@@ -31,7 +31,7 @@ public static class WeatherProvider
             return result!;
         }
 
-        throw new Exception($"Weather API request failed with status code {response.StatusCode}");
+        throw new HttpRequestException($"Weather API request failed with status code {response.StatusCode}");
     }
 
     public static Weather GetWeatherForecast(string query, int days = 3, string lang = "en")
@@ -48,7 +48,7 @@ public static class WeatherProvider
             return result!;
         }
 
-        throw new Exception($"Weather API request failed with status code {response.StatusCode}");
+        throw new HttpRequestException($"Weather API request failed with status code {response.StatusCode}");
     }
 
     private static void ValidateWeatherApiSettings()
