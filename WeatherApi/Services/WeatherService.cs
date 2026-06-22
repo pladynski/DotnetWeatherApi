@@ -1,14 +1,16 @@
-﻿using WeatherApi.Models;
+﻿using System.Net.Http.Json;
+using WeatherService.Models;
 
-namespace WeatherApi.Services;
+namespace WeatherService;
 
-public class WeatherService : IWeatherService
+// Graftcode-exposed weather module: public static methods are the stateless integration contract (sync, primitives/strings/DTOs/arrays only).
+public static class WeatherProvider
 {
     private static readonly string? WEATHER_API_URL = Environment.GetEnvironmentVariable("WEATHER_API_URL");
     private static readonly string? WEATHER_API_KEY = Environment.GetEnvironmentVariable("WEATHER_API_KEY");
     private static readonly HttpClient _httpClient = new HttpClient { };
 
-    public IEnumerable<SearchLocation> FetchLocation(string query, string lang = "en")
+    public static SearchLocation[] SearchLocations(string query, string lang = "en")
     {
         ValidateWeatherApiSettings();
 
@@ -18,14 +20,14 @@ public class WeatherService : IWeatherService
 
         if (response.IsSuccessStatusCode)
         {
-            var result = response.Content.ReadFromJsonAsync<IEnumerable<SearchLocation>>().Result;
+            var result = response.Content.ReadFromJsonAsync<SearchLocation[]>().Result;
             return result!;
         }
 
         throw new HttpRequestException($"Weather API request failed with status code {response.StatusCode}");
     }
 
-    public Weather FetchWeatherForecast(string query, int days = 3, string lang = "en")
+    public static Weather GetWeatherForecast(string query, int days = 3, string lang = "en")
     {
         ValidateWeatherApiSettings();
 
@@ -42,7 +44,7 @@ public class WeatherService : IWeatherService
         throw new HttpRequestException($"Weather API request failed with status code {response.StatusCode}");
     }
 
-    private void ValidateWeatherApiSettings()
+    private static void ValidateWeatherApiSettings()
     {
         if (string.IsNullOrEmpty(WEATHER_API_URL) || string.IsNullOrEmpty(WEATHER_API_KEY))
         {

@@ -1,4 +1,7 @@
 .devcontainer
 .git
 .gitignore
+.env
 .env.example
+**/bin/
+**/obj/

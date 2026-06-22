@@ -1,4 +1,4 @@
-﻿namespace WeatherApi.Models;
+﻿namespace WeatherService.Models;
 
 // Root myDeserializedClass = JsonConvert.DeserializeObject<Root>(myJsonResponse);
 
@@ -81,7 +81,7 @@ public class Day
 
 public class Forecast
 {
-    public List<Forecastday> forecastday { get; set; }
+    public Forecastday[] forecastday { get; set; }
 }
 
 public class Forecastday
@@ -90,7 +90,7 @@ public class Forecastday
     public long date_epoch { get; set; }
     public Day day { get; set; }
     public Astro astro { get; set; }
-    public List<Hour> hour { get; set; }
+    public Hour[] hour { get; set; }
 }
 
 public class Hour
