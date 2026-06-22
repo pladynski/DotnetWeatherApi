@@ -1,19 +1,13 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- AssemblyName drives the Graftcode package name (graft.nuget.weatherservice) and namespace -->
+    <AssemblyName>WeatherService</AssemblyName>
+    <RootNamespace>WeatherService</RootNamespace>
   </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="DotNetEnv" Version="3.0.0" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Utils\" />
-  </ItemGroup>
 
 </Project>

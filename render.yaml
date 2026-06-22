@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: weatherservice-graft
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    # No healthCheckPath: the gg WebSocket server (consumer endpoint /ws) does not answer a plain
+    # HTTP GET on "/" with 200. Render keeps the service live via open-port detection on $PORT.
+    envVars:
+      - key: WEATHER_API_URL
+        value: https://api.weatherapi.com/v1
+      # Set the real value as a secret in the Render dashboard (sync: false keeps it out of git).
+      - key: WEATHER_API_KEY
+        sync: false
+      # Optional but recommended: Graftcode portal key for a STABLE GUID / install URL across deploys.
+      - key: GRAFT_PROJECT_KEY
+        sync: false
+    # Render injects PORT automatically; the Dockerfile CMD passes it to `gg --port $PORT`.

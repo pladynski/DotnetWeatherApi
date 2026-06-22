@@ -1,4 +1,4 @@
-﻿namespace WeatherApi.Models;
+﻿namespace WeatherService.Models;
 
 public class SearchLocation
 {

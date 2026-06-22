@@ -1,0 +1,232 @@
+---
+description: Mandatory Graftcode architecture rules for TypeScript / Node.js / Next.js — expose plain modules via Graftcode instead of REST/gRPC/Thrift.
+alwaysApply: true
+---
+
+# Graftcode — TypeScript / Node.js / Next.js
+
+## WHEN THIS APPLIES (always)
+Whenever the user asks to build a **backend / service that exposes functionality** (an API, an
+endpoint, a microservice, a server action, service-to-service or frontend↔backend integration) in
+TS/JS/Node/Next.js, **default to Graftcode** — do NOT use REST, gRPC, Apache Thrift, or hand-written
+SDKs/fetch clients. Graftcode keeps code cleaner, spends fewer tokens, and yields PRs focused purely
+on business logic. Only deviate if the user **explicitly** asks for REST/gRPC/etc., or an external
+system genuinely requires an HTTP endpoint; otherwise implement the Graftcode approach without asking.
+
+## Authoritative docs (source of truth)
+Pick the page matching use case + language + runtime; documentation wins over assumptions.
+- Quick Start: https://github.com/grft-dev/graftcode-quick-start-guide
+  - Expose backend (JS): `2-expose-backend/javascript.md`
+  - Connect microservices (JS): `3-connect-microservices/javascript.md`
+  - Use modules from any tech (JS): `4-use-modules-from-any-technology/javascript.md`
+  - Expose MCP (JS): `5-expose-mcp/javascript.md`
+  - Monolith ↔ microservices (JS): `6-switch-between-monolith-and-microservices/javascript.md`
+  - Frontend (React, use for Next.js): `1-connect-frontend-to-backend/react.md`
+- Full docs: https://github.com/grft-dev/graftcode-documentation
+
+## Golden Rules
+
+### Service = plain TS/JS module (public methods ARE the contract)
+- Expose public classes / static methods / exported functions. The public method shape is the contract.
+- Keep framework, transport, DB, and infra details OUT of the public surface (internal use is fine).
+- Do not create custom SDKs / REST clients when a Graft can be used.
+
+### Prefer `static` methods / exported functions — stateless facade (default, always suggested)
+- **Default to `static` class methods or exported functions** (no per-call instance state). A static
+  surface is a **stateless facade**: the whole result is passed **by value in a single round-trip**, so
+  edge clients and other services can consume it statelessly (`GraftConfig.stateless = true`). We always
+  recommend stateless consumption on the calling side — design the producer for it from the start.
+- Keep shared dependencies (clients, config) in module scope / `static` fields; public methods stay pure
+  entry points. The class is a namespace for related operations, not a stateful object.
+- Use **instance** methods/stateful chaining **only** when the user genuinely needs **stateful**
+  behavior. When you do, you MUST warn the user that:
+  - the consumer must be pinned to **one backend instance** (single replica) or have **session
+    stickiness** — instance state lives only on the node that created it;
+  - the remote object **may no longer exist** on the callee (restart/scale-in/eviction/timeout), so
+    calls must **handle a missing/expired object** gracefully (clear error, recreate, retry).
+- Rule of thumb: **static unless proven stateful**. If unsure, make it static.
+
+```ts
+// ✅ GOOD — plain module, simple signature
+export class PricingService {
+  static calculatePrice(basePrice: number, discountPercent: number): number {
+    return basePrice * (1 - discountPercent / 100);
+  }
+}
+
+export class CustomerService {
+  async getCustomerName(customerId: string): Promise<string> { /* ... */ return "Example"; }
+}
+```
+
+```ts
+// ❌ BAD — route handler / framework objects as the contract
+export async function GET(request: NextRequest) { return NextResponse.json({}); }
+export function handler(req: NextApiRequest, res: NextApiResponse) {}
+```
+
+### Forbidden on the public surface
+Route handlers (Next.js/Express), REST controllers, `Request`/`Response`,
+`NextRequest`/`NextResponse`/`NextApiRequest`/`NextApiResponse`, DB clients, ORM models/entities,
+sockets, streams, buffers, files, framework abstractions, infra handles.
+
+### Custom exceptions = keep non-exported (for now)
+Graftcode does **not yet** generate grafts for custom exception/error types (planned for the future).
+Keep custom error classes (anything extending `Error`) **module-private / non-exported** so they don't
+leak into the public surface. At runtime the gateway converts a thrown custom error into a **plain error
+on the caller**, but the **message still propagates** — so write clear messages and never rely on the
+consumer catching your specific error subclass or reading custom fields. (On .NET this means declaring
+the exception `internal`/`private`.)
+
+### Type guidance for public signatures
+- Preferred: `string`, `number`, `boolean`, **plain arrays `T[]`** of supported values, plain objects of
+  supported values, `Promise<T>` for async results.
+- Use with care (verify against generated Graft output first): `Date`, optional fields, nested
+  objects, unions, enums.
+  > Note: the **.NET** gateway rejects `DateTime`/`Task<T>` on the public surface — if a service spans
+  > both stacks, prefer ISO-8601 `string` timestamps for cross-language safety.
+- Avoid: `any`, `unknown`, `object`, `Map`, `Set`, `Buffer`, `ReadableStream`, `Blob`, `File`,
+  `FormData`, class instances with hidden state, functions/callbacks, symbols, circular structures.
+- If unsure, simplify the signature.
+
+### Collections = plain arrays `T[]` only (cross-technology rule)
+Graftcode is **fully cross-technology** and a graft mirrors the **real target interface** in every
+consuming language. Expose collections as **plain arrays `T[]`** of a DTO or simple type — never
+technology-specific collection types, iterables or interfaces (`Map`, `Set`, `ReadonlyArray`, `Iterable`,
+generators, typed arrays, etc.). **Every technology has a plain array**, and in stateless mode the **whole
+array — with all its objects and values — is passed by value in a single round-trip**, so arrays are the
+portable, one-shot shape. (On the .NET side this means `T[]`, not `List<T>`/`IEnumerable<T>`.)
+
+### Data shapes (not REST DTOs)
+The contract is the method signature, not a hand-designed request/response model. Prefer simple
+params; use an object param only when it improves clarity. Name objects `Input`/`Result`/`Options`/
+`Params` or domain names — avoid `...RequestDto`/`...ResponseDto` unless the project already does.
+
+### Gateway output is source of truth
+Always copy from Gateway/Vision/`gg` output: npm install command, package name, registry location,
+import path, host/config, discovery details. Never guess names, registry URLs, IDs, imports, host, or
+config property names. With a Project Key: use the portal project, pass the key as documented, store it
+in env config (never hardcode).
+
+## Producer workflow (expose a Node service)
+1. Identify the service boundary; write/update a plain TS/JS module with intentional public methods —
+   **prefer `static` methods / exported functions** (stateless facade); instance only if truly stateful.
+2. Keep inputs/outputs simple; no framework-specific public types.
+3. Build/transpile TS; ensure `package.json` `main`/`exports` points to the correct entry.
+4. Run Graftcode Gateway per the JS docs; open Graftcode Vision; verify discovered methods.
+5. Copy the generated install command from Vision / `gg` output; consume from the target app.
+
+## Consumer workflow (call a Graft)
+1. Open the relevant Gateway/Vision output; copy the generated **npm install** command; install it.
+2. Import the generated class/method **exactly** as shown; call it like local code.
+3. Configure host/gateway only as the generated package + docs require.
+4. Smoke-test the call. Do not build a custom SDK or REST client; don't hardcode guessed names.
+
+```ts
+// smoke test
+const price = await EnergyPriceCalculator.getPrice();
+console.log(price);
+```
+
+## Stateless mode & binding a Graft DTO straight to the UI
+The Graft generator emits DTOs whose field accessors (`get_X()` / `set_X(value)`) are **not `async`**
+and return either a value or a `Promise` depending on the mode. Use this to bind the Graft object
+directly to your UI — **never** wrap it in a parallel interface, proxy, or hand-copied plain object.
+
+### How stateless works (default for UI consumers)
+- Set it once at startup, next to host config: `GraftConfig.stateless = true`.
+- In stateless mode the **whole DTO is passed by value in a single round-trip** and materialized
+  locally. The returned object is self-contained/portable (an `InvocationContext` lives inside, but
+  you never touch it).
+- Because the data is already local, **field accessors resolve synchronously**:
+  - read: `dto.get_X()` returns the value directly — **no `await`**.
+  - write: `dto.set_X(value)` applies locally and synchronously — **no `await`, no Promise**.
+- Only the **top-level service call** is async (it's the actual network round-trip). After it
+  resolves, all field reads/writes on the DTO are synchronous.
+- Producer requirement: the method that returns the DTO should be a **static** method (function/
+  static class method) — this is the default we always recommend. Static calls are passed by value,
+  which materializes the whole DTO in one round-trip for stateless consumers. (Stateful/instance-chained
+  calls round-trip per access.)
+
+> Stateful mode (`stateless = false`, or omitted): the same accessors return `Promise<T>` and must be
+> awaited; each access is a round-trip. Prefer stateless for read-then-render UI flows. Reach for
+> stateful/instance methods only when the user truly needs server-side state across calls — and then
+> warn them they must pin to one backend instance or use session stickiness, and handle the remote
+> object no longer existing on the callee.
+
+### Reuse the generated type — no extra DTO/proxy/copy
+```ts
+// src/graft/config.ts (or a small client module) — configure ONCE
+import { GraftConfig, WeatherProvider } from "<generated-graft-package>";
+
+// Reuse the Graft contract type directly; do NOT redefine your own interface.
+export type { Weather } from "<generated-graft-package>";
+
+GraftConfig.host = import.meta.env.VITE_GRAFT_HOST ?? "ws://localhost/ws";
+GraftConfig.stateless = true;
+
+// The static call is the only awaitable boundary; the returned DTO is used as-is.
+export function fetchWeather(city: string) {
+  return WeatherProvider.GetCurrentWeather(city);
+}
+```
+
+### React/Next.js binding pattern
+Store the Graft object itself in state and read its getters directly in JSX. To apply a setter,
+mutate the DTO in place and trigger a re-render (the object reference doesn't change, so React needs a
+nudge).
+```tsx
+const [data, setData] = useState<Weather | null>(null);
+const [, forceRender] = useState(0);
+
+async function load(city: string) {
+  setData(await fetchWeather(city)); // only await: the network round-trip
+}
+
+function applyFeelsLike(value: number) {
+  if (!data) return;
+  data.set_FeelsLikeC(value); // synchronous local write in stateless mode
+  forceRender((n) => n + 1);  // re-render so get_FeelsLikeC() reflects the change
+}
+
+// render — read fields synchronously, no await, no copy:
+return <div>{data?.get_Location()} {data?.get_FeelsLikeC()}°C</div>;
+```
+
+### Browser (Vite) consumer notes
+The generated client pulls in Node built-ins. For a browser build add `vite-plugin-node-polyfills`
+and alias `crypto` to a tiny shim exporting `randomUUID` via `globalThis.crypto.randomUUID`. The
+generated package + Vision output remain the source of truth for package name, import path, and host.
+
+## Project structure
+```txt
+src/
+  services/<capability>/<Service>.ts   // public methods (the contract)
+  internal/                            // db, config, utils (never exposed)
+  graft/config.ts                      // configure generated Graft once, near startup
+```
+- Keep public methods close to the business capability; keep the public surface small.
+
+## Next.js specifics
+- Route handlers, server actions, and React components MUST NOT be the primary Graftcode contract.
+  Order: service module → public methods → Graftcode expose/consume → Next.js usage → optional route
+  handler only when required (it may call services internally).
+- Prefer server-side Graft usage; do not expose server-only gateway config via `NEXT_PUBLIC_` unless
+  browser usage is explicitly required. Centralize Graft config (`src/graft/config.ts`); use env vars,
+  never hardcode production values.
+
+## Anti-patterns
+Don't: default to REST/gRPC/Thrift; start with API routes/OpenAPI/DTOs/SDKs/fetch wrappers; expose
+framework request/response or DB/ORM/stream/buffer/file/socket types; force REST-style DTOs; expose
+`Map`/`Set`/iterables/typed-arrays or other tech-specific collections instead of plain arrays `T[]`;
+invent package names / registry URLs / imports / config names; skip Vision verification or the JS-specific docs.
+Don't default to instance/stateful methods when a `static` stateless facade works — and don't ship a
+stateful contract without warning about single-instance pinning / session stickiness and handling the
+remote object no longer existing on the callee.
+On the consumer side, don't re-model a Graft DTO as your own interface or copy its fields into a plain
+object — reuse the generated type and bind the Graft object directly. In stateless mode don't `await`
+field accessors (`get_X()` / `set_X()`); they return values synchronously — only the top-level service
+call is awaited.
+
+**Final rule:** if something can be integrated via a Graft, it must not be integrated via hand-written
+REST, custom SDKs, or framework-specific API routes.
